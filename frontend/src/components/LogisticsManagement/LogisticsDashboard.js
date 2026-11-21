@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Card, Row, Col, Table, Badge, Button, Form, Modal,
   InputGroup, Alert, Spinner, Dropdown
@@ -24,6 +24,21 @@ const LogisticsDashboard = ({ showToast }) => {
   const [senderAutofillMatch, setSenderAutofillMatch] = useState(null);
   const [recipientAutofillMatch, setRecipientAutofillMatch] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Manual / Custom Address states & refs
+  const [isCustomDeliveryAddress, setIsCustomDeliveryAddressState] = useState(false);
+  const isCustomDeliveryAddressRef = useRef(false);
+  const setIsCustomDeliveryAddress = (val) => {
+    isCustomDeliveryAddressRef.current = val;
+    setIsCustomDeliveryAddressState(val);
+  };
+
+  const [isCustomPickupAddress, setIsCustomPickupAddressState] = useState(false);
+  const isCustomPickupAddressRef = useRef(false);
+  const setIsCustomPickupAddress = (val) => {
+    isCustomPickupAddressRef.current = val;
+    setIsCustomPickupAddressState(val);
+  };
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('All');
@@ -122,6 +137,7 @@ const LogisticsDashboard = ({ showToast }) => {
     });
 
     if (match) {
+      const profileAddr = match.location?.address || `${match.location?.city || ''} Farmgate`;
       setNewShipment(prev => ({
         ...prev,
         sender: {
@@ -129,7 +145,7 @@ const LogisticsDashboard = ({ showToast }) => {
           phone: rawVal,
           name: match.name || prev.sender.name,
           district: match.location?.district || prev.sender.district,
-          pickupAddress: match.location?.address || `${match.location?.city || ''} Farmgate`,
+          pickupAddress: isCustomPickupAddressRef.current && prev.sender.pickupAddress ? prev.sender.pickupAddress : profileAddr,
           city: match.location?.city || match.location?.district || prev.sender.city
         }
       }));
@@ -156,6 +172,7 @@ const LogisticsDashboard = ({ showToast }) => {
     });
 
     if (match) {
+      const profileAddr = match.location?.address || `${match.location?.city || ''} Delivery Terminal`;
       setNewShipment(prev => ({
         ...prev,
         recipient: {
@@ -163,7 +180,7 @@ const LogisticsDashboard = ({ showToast }) => {
           phone: rawVal,
           name: match.name || prev.recipient.name,
           district: match.location?.district || prev.recipient.district,
-          deliveryAddress: match.location?.address || `${match.location?.city || ''} Delivery Terminal`,
+          deliveryAddress: isCustomDeliveryAddressRef.current && prev.recipient.deliveryAddress ? prev.recipient.deliveryAddress : profileAddr,
           city: match.location?.city || match.location?.district || prev.recipient.city
         }
       }));
@@ -185,6 +202,10 @@ const LogisticsDashboard = ({ showToast }) => {
       await createShipment(newShipment);
       showToast?.('Shipment created and scheduled successfully!', 'success');
       setShowCreateModal(false);
+      setIsCustomDeliveryAddress(false);
+      setIsCustomPickupAddress(false);
+      setSenderAutofillMatch(null);
+      setRecipientAutofillMatch(null);
       fetchData();
     } catch (err) {
       showToast?.(err.response?.data?.error || 'Failed to create shipment', 'danger');
@@ -297,7 +318,17 @@ const LogisticsDashboard = ({ showToast }) => {
           <Button variant="outline-dark" onClick={() => navigate('/logistics-reports')}>
             📊 Report Generator
           </Button>
-          <Button variant="success" className="shadow-sm fw-semibold" onClick={() => setShowCreateModal(true)}>
+          <Button
+            variant="success"
+            className="shadow-sm fw-semibold"
+            onClick={() => {
+              setIsCustomDeliveryAddress(false);
+              setIsCustomPickupAddress(false);
+              setSenderAutofillMatch(null);
+              setRecipientAutofillMatch(null);
+              setShowCreateModal(true);
+            }}
+          >
             ➕ Create Shipment
           </Button>
         </div>
@@ -611,6 +642,61 @@ const LogisticsDashboard = ({ showToast }) => {
                     </option>
                   ))}
                 </Form.Select>
+
+                {/* Manual Pickup Address Option Bar */}
+                <div className="d-flex justify-content-between align-items-center p-2 mb-2 bg-light rounded border border-success-subtle">
+                  <div className="d-flex align-items-center gap-2">
+                    <span className="small fw-bold text-dark">Pickup Location:</span>
+                    {isCustomPickupAddress ? (
+                      <Badge bg="warning" text="dark" className="border border-warning">
+                        ✍️ Manual / Custom Farm Location Active
+                      </Badge>
+                    ) : senderAutofillMatch ? (
+                      <Badge bg="success">
+                        🌾 Registered Farmgate Address
+                      </Badge>
+                    ) : (
+                      <Badge bg="secondary">
+                        Standard Location
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="d-flex align-items-center gap-2">
+                    {senderAutofillMatch && isCustomPickupAddress && (
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0 text-decoration-none small text-success fw-semibold"
+                        onClick={() => {
+                          setIsCustomPickupAddress(false);
+                          const profileAddr = senderAutofillMatch.location?.address || `${senderAutofillMatch.location?.city || ''} Farmgate`;
+                          setNewShipment(prev => ({
+                            ...prev,
+                            sender: { ...prev.sender, pickupAddress: profileAddr }
+                          }));
+                        }}
+                      >
+                        ↺ Restore Farmgate Address
+                      </Button>
+                    )}
+                    <Form.Check 
+                      type="switch"
+                      id="custom-pickup-address-switch"
+                      label={<span className="small fw-semibold text-dark" style={{ fontSize: '0.82rem' }}>✍️ Custom / Manual Pickup</span>}
+                      checked={isCustomPickupAddress}
+                      onChange={(e) => {
+                        setIsCustomPickupAddress(e.target.checked);
+                        if (!e.target.checked && senderAutofillMatch) {
+                          const profileAddr = senderAutofillMatch.location?.address || `${senderAutofillMatch.location?.city || ''} Farmgate`;
+                          setNewShipment(prev => ({
+                            ...prev,
+                            sender: { ...prev.sender, pickupAddress: profileAddr }
+                          }));
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
               </Col>
 
               <Col md={6}>
@@ -666,14 +752,38 @@ const LogisticsDashboard = ({ showToast }) => {
               </Col>
               <Col md={6}>
                 <Form.Group>
-                  <Form.Label className="small fw-bold">Pickup Address / Farm Location *</Form.Label>
+                  <div className="d-flex justify-content-between align-items-center mb-1">
+                    <Form.Label className="small fw-bold mb-0">Pickup Address / Farm Location *</Form.Label>
+                    {isCustomPickupAddress ? (
+                      <span className="badge bg-warning-subtle text-warning-emphasis border border-warning px-1" style={{ fontSize: '0.72rem' }}>
+                        ✍️ Manual Location
+                      </span>
+                    ) : senderAutofillMatch ? (
+                      <span className="small text-muted" style={{ fontSize: '0.74rem' }}>
+                        Auto from farm profile
+                      </span>
+                    ) : null}
+                  </div>
                   <Form.Control
                     type="text"
-                    placeholder="Farmgate, packhouse or stall location"
+                    placeholder={isCustomPickupAddress ? "Enter field gate, roadside collection point, or packhouse..." : "Farmgate, packhouse or stall location"}
                     value={newShipment.sender.pickupAddress}
-                    onChange={(e) => setNewShipment({ ...newShipment, sender: { ...newShipment.sender, pickupAddress: e.target.value } })}
+                    className={isCustomPickupAddress ? "border-warning bg-warning-subtle text-dark fw-medium" : ""}
+                    onChange={(e) => {
+                      setIsCustomPickupAddress(true);
+                      setNewShipment({ ...newShipment, sender: { ...newShipment.sender, pickupAddress: e.target.value } });
+                    }}
                     required
                   />
+                  {isCustomPickupAddress ? (
+                    <Form.Text className="text-muted" style={{ fontSize: '0.75rem' }}>
+                      💡 Manual mode: You can enter any custom pickup point. Phone autofill won't overwrite this.
+                    </Form.Text>
+                  ) : (
+                    <Form.Text className="text-muted" style={{ fontSize: '0.75rem' }}>
+                      💡 Switch to manual above if pickup is from a different farm or packhouse.
+                    </Form.Text>
+                  )}
                 </Form.Group>
               </Col>
 
@@ -700,6 +810,61 @@ const LogisticsDashboard = ({ showToast }) => {
                     </option>
                   ))}
                 </Form.Select>
+
+                {/* Manual Delivery Address Option Bar */}
+                <div className="d-flex justify-content-between align-items-center p-2 mb-2 bg-light rounded border border-primary-subtle">
+                  <div className="d-flex align-items-center gap-2">
+                    <span className="small fw-bold text-dark">Delivery Address:</span>
+                    {isCustomDeliveryAddress ? (
+                      <Badge bg="warning" text="dark" className="border border-warning">
+                        ✍️ Manual / Custom Address Active
+                      </Badge>
+                    ) : recipientAutofillMatch ? (
+                      <Badge bg="primary">
+                        🏢 Registered Profile Address
+                      </Badge>
+                    ) : (
+                      <Badge bg="secondary">
+                        Standard Address
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="d-flex align-items-center gap-2">
+                    {recipientAutofillMatch && isCustomDeliveryAddress && (
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0 text-decoration-none small text-primary fw-semibold"
+                        onClick={() => {
+                          setIsCustomDeliveryAddress(false);
+                          const profileAddr = recipientAutofillMatch.location?.address || `${recipientAutofillMatch.location?.city || ''} Delivery Terminal`;
+                          setNewShipment(prev => ({
+                            ...prev,
+                            recipient: { ...prev.recipient, deliveryAddress: profileAddr }
+                          }));
+                        }}
+                      >
+                        ↺ Restore Profile Address
+                      </Button>
+                    )}
+                    <Form.Check 
+                      type="switch"
+                      id="custom-delivery-address-switch"
+                      label={<span className="small fw-semibold text-dark" style={{ fontSize: '0.82rem' }}>✍️ Custom / Manual Address</span>}
+                      checked={isCustomDeliveryAddress}
+                      onChange={(e) => {
+                        setIsCustomDeliveryAddress(e.target.checked);
+                        if (!e.target.checked && recipientAutofillMatch) {
+                          const profileAddr = recipientAutofillMatch.location?.address || `${recipientAutofillMatch.location?.city || ''} Delivery Terminal`;
+                          setNewShipment(prev => ({
+                            ...prev,
+                            recipient: { ...prev.recipient, deliveryAddress: profileAddr }
+                          }));
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
               </Col>
 
               <Col md={6}>
@@ -720,10 +885,16 @@ const LogisticsDashboard = ({ showToast }) => {
                       </option>
                     ))}
                   </datalist>
-                  {recipientAutofillMatch && (
+                  {recipientAutofillMatch ? (
                     <Badge bg="primary" className="d-block text-start p-2 mt-1 shadow-sm">
                       ✨ Autofilled: [{recipientAutofillMatch.userId || 'BUY'}] {recipientAutofillMatch.name} ({recipientAutofillMatch.location?.city})
                     </Badge>
+                  ) : (
+                    newShipment.recipient.phone && newShipment.recipient.phone.replace(/\D/g, '').length >= 7 && (
+                      <Badge bg="secondary" className="d-block text-start p-2 mt-1 shadow-sm">
+                        ✍️ Unregistered Buyer (Manual Entry Mode)
+                      </Badge>
+                    )
                   )}
                 </Form.Group>
               </Col>
@@ -755,14 +926,38 @@ const LogisticsDashboard = ({ showToast }) => {
               </Col>
               <Col md={6}>
                 <Form.Group>
-                  <Form.Label className="small fw-bold">Delivery Address *</Form.Label>
+                  <div className="d-flex justify-content-between align-items-center mb-1">
+                    <Form.Label className="small fw-bold mb-0">Delivery Address *</Form.Label>
+                    {isCustomDeliveryAddress ? (
+                      <span className="badge bg-warning-subtle text-warning-emphasis border border-warning px-1" style={{ fontSize: '0.72rem' }}>
+                        ✍️ Manual Location
+                      </span>
+                    ) : recipientAutofillMatch ? (
+                      <span className="small text-muted" style={{ fontSize: '0.74rem' }}>
+                        Auto from buyer profile
+                      </span>
+                    ) : null}
+                  </div>
                   <Form.Control
                     type="text"
-                    placeholder="Warehouse, retail terminal, or market stall address"
+                    placeholder={isCustomDeliveryAddress ? "Enter specific branch, shop stall, warehouse or manual address..." : "Warehouse, retail terminal, or market stall address"}
                     value={newShipment.recipient.deliveryAddress}
-                    onChange={(e) => setNewShipment({ ...newShipment, recipient: { ...newShipment.recipient, deliveryAddress: e.target.value } })}
+                    className={isCustomDeliveryAddress ? "border-warning bg-warning-subtle text-dark fw-medium" : ""}
+                    onChange={(e) => {
+                      setIsCustomDeliveryAddress(true);
+                      setNewShipment({ ...newShipment, recipient: { ...newShipment.recipient, deliveryAddress: e.target.value } });
+                    }}
                     required
                   />
+                  {isCustomDeliveryAddress ? (
+                    <Form.Text className="text-muted" style={{ fontSize: '0.75rem' }}>
+                      💡 Manual mode: You can enter any custom delivery location. Phone autofill won't overwrite this.
+                    </Form.Text>
+                  ) : (
+                    <Form.Text className="text-muted" style={{ fontSize: '0.75rem' }}>
+                      💡 Switch to manual above if the delivery destination is different from profile.
+                    </Form.Text>
+                  )}
                 </Form.Group>
               </Col>
 
