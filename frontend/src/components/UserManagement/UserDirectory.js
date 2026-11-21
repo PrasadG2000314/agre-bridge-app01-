@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Card, Table, Badge, Button, Form, Row, Col, 
-  InputGroup, Modal, Spinner, Tabs, Tab 
+import {
+  Card, Table, Badge, Button, Form, Row, Col,
+  InputGroup, Modal, Spinner, Tabs, Tab
 } from 'react-bootstrap';
 import { getAllUsers, updateUserRole, updateDriverAvailability, deleteUser } from '../../services/authService';
 
@@ -99,6 +99,7 @@ const UserDirectory = ({ showToast }) => {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const match = (
+        u.userId?.toLowerCase().includes(q) ||
         u.name?.toLowerCase().includes(q) ||
         u.email?.toLowerCase().includes(q) ||
         u.phone?.toLowerCase().includes(q) ||
@@ -200,14 +201,23 @@ const UserDirectory = ({ showToast }) => {
                   <tr key={u._id}>
                     <td>
                       <div className="d-flex align-items-center gap-2">
-                        <div 
+                        <div
                           className="bg-success text-white rounded-circle d-flex align-items-center justify-content-center fw-bold"
-                          style={{ width: '38px', height: '38px' }}
+                          style={{ width: '38px', height: '38px', flexShrink: 0 }}
                         >
                           {u.name?.charAt(0) || 'U'}
                         </div>
                         <div>
-                          <div className="fw-semibold">{u.name}</div>
+                          <div className="d-flex align-items-center gap-2">
+                            <span className="fw-semibold">{u.name}</span>
+                            <Badge
+                              bg={u.role === 'Admin' ? 'danger' : u.role === 'Driver' ? 'primary' : u.role === 'Seller' ? 'success' : 'info'}
+                              className={`font-monospace ${u.role === 'Buyer' ? 'text-dark' : ''}`}
+                              style={{ fontSize: '0.72rem' }}
+                            >
+                              {u.userId || 'USR'}
+                            </Badge>
+                          </div>
                           <div className="small text-muted">{u.email}</div>
                         </div>
                       </div>
@@ -282,7 +292,12 @@ const UserDirectory = ({ showToast }) => {
                 {driversList.map((d) => (
                   <tr key={d._id}>
                     <td>
-                      <div className="fw-bold">{d.name}</div>
+                      <div className="d-flex align-items-center gap-2">
+                        <span className="fw-bold">{d.name}</span>
+                        <Badge bg="primary" className="font-monospace" style={{ fontSize: '0.72rem' }}>
+                          {d.userId || 'DRV'}
+                        </Badge>
+                      </div>
                       <div className="small text-muted">{d.email} • {d.phone}</div>
                     </td>
                     <td>

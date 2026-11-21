@@ -2,6 +2,12 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const UserSchema = new mongoose.Schema({
+  userId: {
+    type: String,
+    unique: true,
+    sparse: true,
+    index: true
+  },
   name: {
     type: String,
     required: [true, 'Name is required'],
@@ -64,8 +70,20 @@ const UserSchema = new mongoose.Schema({
   timestamps: true 
 });
 
-// Hash password before saving if modified
+// Generate custom role-based User ID and hash password before saving
 UserSchema.pre('save', async function() {
+  if (!this.userId) {
+    const rolePrefixes = {
+      Admin: 'ADM',
+      Driver: 'DRV',
+      Seller: 'SEL',
+      Buyer: 'BUY'
+    };
+    const prefix = rolePrefixes[this.role] || 'USR';
+    const randNum = Math.floor(100 + Math.random() * 900);
+    this.userId = `${prefix}-${randNum}`;
+  }
+
   if (!this.isModified('password')) return;
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);

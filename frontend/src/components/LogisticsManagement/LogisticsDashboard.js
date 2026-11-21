@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Card, Row, Col, Table, Badge, Button, Form, Modal, 
-  InputGroup, Alert, Spinner, Dropdown 
+import {
+  Card, Row, Col, Table, Badge, Button, Form, Modal,
+  InputGroup, Alert, Spinner, Dropdown
 } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
-  getAllShipments, createShipment, assignDriver, 
-  autoAssignDriver, updateShipmentStatus, verifyProofOfDelivery 
+import {
+  getAllShipments, createShipment, assignDriver,
+  autoAssignDriver, updateShipmentStatus, verifyProofOfDelivery
 } from '../../services/shipmentService';
-import { getAllDrivers } from '../../services/authService';
+import { getAllDrivers, getAllUsers } from '../../services/authService';
 
 const DISTRICTS = [
   'Colombo', 'Gampaha', 'Kalutara', 'Kandy', 'Matale', 'Nuwara Eliya',
@@ -20,6 +20,9 @@ const LogisticsDashboard = ({ showToast }) => {
   const navigate = useNavigate();
   const [shipments, setShipments] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
+  const [senderAutofillMatch, setSenderAutofillMatch] = useState(null);
+  const [recipientAutofillMatch, setRecipientAutofillMatch] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -59,12 +62,14 @@ const LogisticsDashboard = ({ showToast }) => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [shipmentsData, driversData] = await Promise.all([
+      const [shipmentsData, driversData, usersData] = await Promise.all([
         getAllShipments(),
-        getAllDrivers()
+        getAllDrivers(),
+        getAllUsers()
       ]);
       setShipments(shipmentsData);
       setDrivers(driversData);
+      setAllUsers(usersData);
     } catch (err) {
       console.error('Failed to load logistics data:', err);
       showToast?.('Error fetching logistics data', 'danger');
@@ -103,6 +108,74 @@ const LogisticsDashboard = ({ showToast }) => {
   const deliveredCount = shipments.filter(s => s.status === 'Delivered').length;
   const delayedCount = shipments.filter(s => s.isDelayed).length;
   const availableDriversCount = drivers.filter(d => d.driverDetails?.isAvailable).length;
+
+  // Autofill Sender Details when phone number is entered or selected
+  const handleSenderPhoneChange = (inputVal) => {
+    const rawVal = inputVal || '';
+    const digitsOnly = rawVal.replace(/\D/g, '');
+
+    // Search for match in registered users
+    const match = allUsers.find(u => {
+      if (!u.phone) return false;
+      const uDigits = u.phone.replace(/\D/g, '');
+      return u.phone === rawVal.trim() || (digitsOnly.length >= 7 && uDigits.endsWith(digitsOnly.slice(-7)));
+    });
+
+    if (match) {
+      setNewShipment(prev => ({
+        ...prev,
+        sender: {
+          ...prev.sender,
+          phone: rawVal,
+          name: match.name || prev.sender.name,
+          district: match.location?.district || prev.sender.district,
+          pickupAddress: match.location?.address || `${match.location?.city || ''} Farmgate`,
+          city: match.location?.city || match.location?.district || prev.sender.city
+        }
+      }));
+      setSenderAutofillMatch(match);
+    } else {
+      setNewShipment(prev => ({
+        ...prev,
+        sender: { ...prev.sender, phone: rawVal }
+      }));
+      setSenderAutofillMatch(null);
+    }
+  };
+
+  // Autofill Recipient Details when phone number is entered or selected
+  const handleRecipientPhoneChange = (inputVal) => {
+    const rawVal = inputVal || '';
+    const digitsOnly = rawVal.replace(/\D/g, '');
+
+    // Search for match in registered users
+    const match = allUsers.find(u => {
+      if (!u.phone) return false;
+      const uDigits = u.phone.replace(/\D/g, '');
+      return u.phone === rawVal.trim() || (digitsOnly.length >= 7 && uDigits.endsWith(digitsOnly.slice(-7)));
+    });
+
+    if (match) {
+      setNewShipment(prev => ({
+        ...prev,
+        recipient: {
+          ...prev.recipient,
+          phone: rawVal,
+          name: match.name || prev.recipient.name,
+          district: match.location?.district || prev.recipient.district,
+          deliveryAddress: match.location?.address || `${match.location?.city || ''} Delivery Terminal`,
+          city: match.location?.city || match.location?.district || prev.recipient.city
+        }
+      }));
+      setRecipientAutofillMatch(match);
+    } else {
+      setNewShipment(prev => ({
+        ...prev,
+        recipient: { ...prev.recipient, phone: rawVal }
+      }));
+      setRecipientAutofillMatch(null);
+    }
+  };
 
   // Handle New Shipment Submit
   const handleCreateShipment = async (e) => {
@@ -370,7 +443,7 @@ const LogisticsDashboard = ({ showToast }) => {
                 {filteredShipments.map((s) => (
                   <tr key={s._id}>
                     <td>
-                      <Link 
+                      <Link
                         to={`/tracking?trk=${s.trackingNumber}`}
                         className="fw-bold text-success text-decoration-none"
                       >
@@ -406,9 +479,9 @@ const LogisticsDashboard = ({ showToast }) => {
                         <div>
                           <span className="text-warning small fw-bold">Unassigned</span>
                           <div className="mt-1">
-                            <Button 
-                              variant="outline-success" 
-                              size="sm" 
+                            <Button
+                              variant="outline-success"
+                              size="sm"
                               className="py-0 px-2"
                               style={{ fontSize: '0.75rem' }}
                               onClick={() => handleAutoAssign(s._id)}
@@ -494,59 +567,97 @@ const LogisticsDashboard = ({ showToast }) => {
               <Col md={8}>
                 <Form.Group>
                   <Form.Label className="small fw-bold">Shipment Title / Commodity Description *</Form.Label>
-                  <Form.Control 
-                    type="text" 
-                    placeholder="e.g. 500kg Premium Willard Mangoes" 
+                  <Form.Control
+                    type="text"
+                    placeholder="e.g. 500kg Premium Willard Mangoes"
                     value={newShipment.orderTitle}
                     onChange={(e) => setNewShipment({ ...newShipment, orderTitle: e.target.value })}
-                    required 
+                    required
                   />
                 </Form.Group>
               </Col>
               <Col md={4}>
                 <Form.Group>
                   <Form.Label className="small fw-bold">Order / Request Reference ID</Form.Label>
-                  <Form.Control 
-                    type="text" 
-                    placeholder="e.g. REQ-379 (optional)" 
+                  <Form.Control
+                    type="text"
+                    placeholder="e.g. REQ-379 (optional)"
                     value={newShipment.orderId}
                     onChange={(e) => setNewShipment({ ...newShipment, orderId: e.target.value })}
                   />
                 </Form.Group>
               </Col>
 
-              <Col md={12}><hr className="my-1" /><h6 className="fw-bold text-success mb-2">📍 Origin (Farmer / Seller)</h6></Col>
-              
+              <Col md={12}>
+                <hr className="my-1" />
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <h6 className="fw-bold text-success mb-0">📍 Origin (Farmer / Seller)</h6>
+                  <span className="small text-muted" style={{ fontSize: '0.78rem' }}>
+                    💡 Enter Sender Phone to auto-fill farmer details
+                  </span>
+                </div>
+
+                {/* Quick Select Farmer Dropdown */}
+                <Form.Select
+                  size="sm"
+                  className="mb-2 bg-light border-success text-success fw-semibold"
+                  onChange={(e) => e.target.value && handleSenderPhoneChange(e.target.value)}
+                  defaultValue=""
+                >
+                  <option value="">⚡ Quick-Select Registered Farmer / Seller (Auto-fills all details)...</option>
+                  {allUsers.filter(u => u.role === 'Seller' || u.role === 'Admin').map(u => (
+                    <option key={u._id} value={u.phone}>
+                      [{u.userId || 'SEL'}] {u.name} — {u.phone} ({u.location?.city || u.location?.district})
+                    </option>
+                  ))}
+                </Form.Select>
+              </Col>
+
               <Col md={6}>
                 <Form.Group>
-                  <Form.Label className="small fw-bold">Sender Name *</Form.Label>
-                  <Form.Control 
-                    type="text" 
-                    value={newShipment.sender.name}
-                    onChange={(e) => setNewShipment({ ...newShipment, sender: { ...newShipment.sender, name: e.target.value } })}
-                    required 
+                  <Form.Label className="small fw-bold">Sender Contact Phone *</Form.Label>
+                  <Form.Control
+                    type="text"
+                    placeholder="e.g. +94 78 333 9911"
+                    value={newShipment.sender.phone}
+                    onChange={(e) => handleSenderPhoneChange(e.target.value)}
+                    list="registered-sellers-datalist"
+                    required
                   />
+                  <datalist id="registered-sellers-datalist">
+                    {allUsers.filter(u => u.role === 'Seller' || u.role === 'Admin').map(u => (
+                      <option key={u._id} value={u.phone}>
+                        [{u.userId || 'SEL'}] {u.name} - {u.location?.city}
+                      </option>
+                    ))}
+                  </datalist>
+                  {senderAutofillMatch && (
+                    <Badge bg="success" className="d-block text-start p-2 mt-1 shadow-sm">
+                      ✨ Autofilled: [{senderAutofillMatch.userId || 'SEL'}] {senderAutofillMatch.name} ({senderAutofillMatch.location?.city})
+                    </Badge>
+                  )}
                 </Form.Group>
               </Col>
               <Col md={6}>
                 <Form.Group>
-                  <Form.Label className="small fw-bold">Sender Contact Phone *</Form.Label>
-                  <Form.Control 
-                    type="text" 
-                    value={newShipment.sender.phone}
-                    onChange={(e) => setNewShipment({ ...newShipment, sender: { ...newShipment.sender, phone: e.target.value } })}
-                    required 
+                  <Form.Label className="small fw-bold">Sender Name *</Form.Label>
+                  <Form.Control
+                    type="text"
+                    placeholder="Farmer or cooperative name"
+                    value={newShipment.sender.name}
+                    onChange={(e) => setNewShipment({ ...newShipment, sender: { ...newShipment.sender, name: e.target.value } })}
+                    required
                   />
                 </Form.Group>
               </Col>
               <Col md={6}>
                 <Form.Group>
                   <Form.Label className="small fw-bold">Pickup District</Form.Label>
-                  <Form.Select 
+                  <Form.Select
                     value={newShipment.sender.district}
-                    onChange={(e) => setNewShipment({ 
-                      ...newShipment, 
-                      sender: { ...newShipment.sender, district: e.target.value, city: e.target.value } 
+                    onChange={(e) => setNewShipment({
+                      ...newShipment,
+                      sender: { ...newShipment.sender, district: e.target.value, city: e.target.value }
                     })}
                   >
                     {DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
@@ -556,47 +667,86 @@ const LogisticsDashboard = ({ showToast }) => {
               <Col md={6}>
                 <Form.Group>
                   <Form.Label className="small fw-bold">Pickup Address / Farm Location *</Form.Label>
-                  <Form.Control 
-                    type="text" 
+                  <Form.Control
+                    type="text"
+                    placeholder="Farmgate, packhouse or stall location"
                     value={newShipment.sender.pickupAddress}
                     onChange={(e) => setNewShipment({ ...newShipment, sender: { ...newShipment.sender, pickupAddress: e.target.value } })}
-                    required 
+                    required
                   />
                 </Form.Group>
               </Col>
 
-              <Col md={12}><hr className="my-1" /><h6 className="fw-bold text-primary mb-2">🏁 Destination (Buyer / Recipient)</h6></Col>
+              <Col md={12}>
+                <hr className="my-1" />
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <h6 className="fw-bold text-primary mb-0">🏁 Destination (Buyer / Recipient)</h6>
+                  <span className="small text-muted" style={{ fontSize: '0.78rem' }}>
+                    💡 Enter Recipient Phone to auto-fill buyer details
+                  </span>
+                </div>
 
-              <Col md={6}>
-                <Form.Group>
-                  <Form.Label className="small fw-bold">Recipient Name *</Form.Label>
-                  <Form.Control 
-                    type="text" 
-                    value={newShipment.recipient.name}
-                    onChange={(e) => setNewShipment({ ...newShipment, recipient: { ...newShipment.recipient, name: e.target.value } })}
-                    required 
-                  />
-                </Form.Group>
+                {/* Quick Select Buyer Dropdown */}
+                <Form.Select
+                  size="sm"
+                  className="mb-2 bg-light border-primary text-primary fw-semibold"
+                  onChange={(e) => e.target.value && handleRecipientPhoneChange(e.target.value)}
+                  defaultValue=""
+                >
+                  <option value="">⚡ Quick-Select Registered Buyer / Merchant (Auto-fills all details)...</option>
+                  {allUsers.filter(u => u.role === 'Buyer').map(u => (
+                    <option key={u._id} value={u.phone}>
+                      [{u.userId || 'BUY'}] {u.name} — {u.phone} ({u.location?.city || u.location?.district})
+                    </option>
+                  ))}
+                </Form.Select>
               </Col>
+
               <Col md={6}>
                 <Form.Group>
                   <Form.Label className="small fw-bold">Recipient Contact Phone *</Form.Label>
-                  <Form.Control 
-                    type="text" 
+                  <Form.Control
+                    type="text"
+                    placeholder="e.g. +94 77 999 5544"
                     value={newShipment.recipient.phone}
-                    onChange={(e) => setNewShipment({ ...newShipment, recipient: { ...newShipment.recipient, phone: e.target.value } })}
-                    required 
+                    onChange={(e) => handleRecipientPhoneChange(e.target.value)}
+                    list="registered-buyers-datalist"
+                    required
+                  />
+                  <datalist id="registered-buyers-datalist">
+                    {allUsers.filter(u => u.role === 'Buyer').map(u => (
+                      <option key={u._id} value={u.phone}>
+                        [{u.userId || 'BUY'}] {u.name} - {u.location?.city}
+                      </option>
+                    ))}
+                  </datalist>
+                  {recipientAutofillMatch && (
+                    <Badge bg="primary" className="d-block text-start p-2 mt-1 shadow-sm">
+                      ✨ Autofilled: [{recipientAutofillMatch.userId || 'BUY'}] {recipientAutofillMatch.name} ({recipientAutofillMatch.location?.city})
+                    </Badge>
+                  )}
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label className="small fw-bold">Recipient Name *</Form.Label>
+                  <Form.Control
+                    type="text"
+                    placeholder="Buyer or wholesale receiving company"
+                    value={newShipment.recipient.name}
+                    onChange={(e) => setNewShipment({ ...newShipment, recipient: { ...newShipment.recipient, name: e.target.value } })}
+                    required
                   />
                 </Form.Group>
               </Col>
               <Col md={6}>
                 <Form.Group>
                   <Form.Label className="small fw-bold">Delivery District</Form.Label>
-                  <Form.Select 
+                  <Form.Select
                     value={newShipment.recipient.district}
-                    onChange={(e) => setNewShipment({ 
-                      ...newShipment, 
-                      recipient: { ...newShipment.recipient, district: e.target.value, city: e.target.value } 
+                    onChange={(e) => setNewShipment({
+                      ...newShipment,
+                      recipient: { ...newShipment.recipient, district: e.target.value, city: e.target.value }
                     })}
                   >
                     {DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
@@ -606,11 +756,12 @@ const LogisticsDashboard = ({ showToast }) => {
               <Col md={6}>
                 <Form.Group>
                   <Form.Label className="small fw-bold">Delivery Address *</Form.Label>
-                  <Form.Control 
-                    type="text" 
+                  <Form.Control
+                    type="text"
+                    placeholder="Warehouse, retail terminal, or market stall address"
                     value={newShipment.recipient.deliveryAddress}
                     onChange={(e) => setNewShipment({ ...newShipment, recipient: { ...newShipment.recipient, deliveryAddress: e.target.value } })}
-                    required 
+                    required
                   />
                 </Form.Group>
               </Col>
@@ -620,16 +771,16 @@ const LogisticsDashboard = ({ showToast }) => {
               <Col md={3}>
                 <Form.Group>
                   <Form.Label className="small fw-bold">Weight (kg)</Form.Label>
-                  <Form.Control 
-                    type="number" 
+                  <Form.Control
+                    type="number"
                     value={newShipment.packageDetails.weightKg}
-                    onChange={(e) => setNewShipment({ 
-                      ...newShipment, 
-                      packageDetails: { 
-                        ...newShipment.packageDetails, 
+                    onChange={(e) => setNewShipment({
+                      ...newShipment,
+                      packageDetails: {
+                        ...newShipment.packageDetails,
                         weightKg: Number(e.target.value),
                         quantity: Number(e.target.value)
-                      } 
+                      }
                     })}
                   />
                 </Form.Group>
@@ -637,11 +788,11 @@ const LogisticsDashboard = ({ showToast }) => {
               <Col md={4}>
                 <Form.Group>
                   <Form.Label className="small fw-bold">Produce Handling Requirement</Form.Label>
-                  <Form.Select 
+                  <Form.Select
                     value={newShipment.packageDetails.specialHandling}
-                    onChange={(e) => setNewShipment({ 
-                      ...newShipment, 
-                      packageDetails: { ...newShipment.packageDetails, specialHandling: e.target.value } 
+                    onChange={(e) => setNewShipment({
+                      ...newShipment,
+                      packageDetails: { ...newShipment.packageDetails, specialHandling: e.target.value }
                     })}
                   >
                     <option value="Perishable / Keep Cool">Perishable / Keep Cool (Refrigerated)</option>
@@ -654,7 +805,7 @@ const LogisticsDashboard = ({ showToast }) => {
               <Col md={3}>
                 <Form.Group>
                   <Form.Label className="small fw-bold">Priority Level</Form.Label>
-                  <Form.Select 
+                  <Form.Select
                     value={newShipment.priority}
                     onChange={(e) => setNewShipment({ ...newShipment, priority: e.target.value })}
                   >
@@ -667,8 +818,8 @@ const LogisticsDashboard = ({ showToast }) => {
               <Col md={2}>
                 <Form.Group>
                   <Form.Label className="small fw-bold">Est. Hours</Form.Label>
-                  <Form.Control 
-                    type="number" 
+                  <Form.Control
+                    type="number"
                     value={newShipment.estimatedDeliveryHours}
                     onChange={(e) => setNewShipment({ ...newShipment, estimatedDeliveryHours: Number(e.target.value) })}
                   />
@@ -697,8 +848,8 @@ const LogisticsDashboard = ({ showToast }) => {
             </p>
             <Form.Group className="mb-3">
               <Form.Label className="small fw-bold">Select Active Driver</Form.Label>
-              <Form.Select 
-                value={selectedDriverId} 
+              <Form.Select
+                value={selectedDriverId}
                 onChange={(e) => setSelectedDriverId(e.target.value)}
                 required
               >
@@ -733,7 +884,7 @@ const LogisticsDashboard = ({ showToast }) => {
           <Modal.Body>
             <Form.Group className="mb-3">
               <Form.Label className="small fw-bold">New Status</Form.Label>
-              <Form.Select 
+              <Form.Select
                 value={statusUpdateForm.status}
                 onChange={(e) => setStatusUpdateForm({ ...statusUpdateForm, status: e.target.value })}
               >
@@ -746,9 +897,9 @@ const LogisticsDashboard = ({ showToast }) => {
 
             <Form.Group className="mb-3">
               <Form.Label className="small fw-bold">Current Milestone Checkpoint / Location</Form.Label>
-              <Form.Control 
-                type="text" 
-                placeholder="e.g. Kurunegala Highway Interchange" 
+              <Form.Control
+                type="text"
+                placeholder="e.g. Kurunegala Highway Interchange"
                 value={statusUpdateForm.location}
                 onChange={(e) => setStatusUpdateForm({ ...statusUpdateForm, location: e.target.value })}
               />
@@ -756,9 +907,9 @@ const LogisticsDashboard = ({ showToast }) => {
 
             <Form.Group className="mb-3">
               <Form.Label className="small fw-bold">Status Update Note</Form.Label>
-              <Form.Control 
-                as="textarea" 
-                rows={2} 
+              <Form.Control
+                as="textarea"
+                rows={2}
                 placeholder="e.g. Cargo inspected and moving smoothly towards Colombo"
                 value={statusUpdateForm.note}
                 onChange={(e) => setStatusUpdateForm({ ...statusUpdateForm, note: e.target.value })}
@@ -767,8 +918,8 @@ const LogisticsDashboard = ({ showToast }) => {
 
             <Form.Group className="mb-3">
               <Form.Label className="small fw-bold text-danger">Delay Reason (if delayed)</Form.Label>
-              <Form.Control 
-                type="text" 
+              <Form.Control
+                type="text"
                 placeholder="Leave blank if on schedule"
                 value={statusUpdateForm.delayReason}
                 onChange={(e) => setStatusUpdateForm({ ...statusUpdateForm, delayReason: e.target.value })}
@@ -801,8 +952,8 @@ const LogisticsDashboard = ({ showToast }) => {
 
             <Form.Group className="mb-3">
               <Form.Label className="small fw-bold">Enter Delivery Confirmation OTP *</Form.Label>
-              <Form.Control 
-                type="text" 
+              <Form.Control
+                type="text"
                 placeholder="6-digit OTP code"
                 value={podForm.otp}
                 onChange={(e) => setPodForm({ ...podForm, otp: e.target.value })}
@@ -815,8 +966,8 @@ const LogisticsDashboard = ({ showToast }) => {
 
             <Form.Group className="mb-3">
               <Form.Label className="small fw-bold">Recipient Signature / Sign-off Name</Form.Label>
-              <Form.Control 
-                type="text" 
+              <Form.Control
+                type="text"
                 placeholder="Recipient full name / digital sign-off"
                 value={podForm.signature}
                 onChange={(e) => setPodForm({ ...podForm, signature: e.target.value })}
@@ -825,9 +976,9 @@ const LogisticsDashboard = ({ showToast }) => {
 
             <Form.Group className="mb-3">
               <Form.Label className="small fw-bold">Handover Remarks / Delivery Notes</Form.Label>
-              <Form.Control 
-                as="textarea" 
-                rows={2} 
+              <Form.Control
+                as="textarea"
+                rows={2}
                 placeholder="e.g. All produce crates inspected in fresh condition."
                 value={podForm.notes}
                 onChange={(e) => setPodForm({ ...podForm, notes: e.target.value })}

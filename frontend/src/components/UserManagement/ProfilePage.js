@@ -175,7 +175,12 @@ const ProfilePage = ({ showToast }) => {
                         {currentUser.name?.charAt(0) || 'U'}
                       </div>
                       <div>
-                        <h5 className="fw-bold mb-0">{currentUser.name}</h5>
+                        <div className="d-flex align-items-center gap-2">
+                          <h5 className="fw-bold mb-0">{currentUser.name}</h5>
+                          <Badge bg="dark" className="font-monospace">
+                            {currentUser.userId || (currentUser.role === 'Admin' ? 'ADM-001' : currentUser.role === 'Driver' ? 'DRV-101' : currentUser.role === 'Seller' ? 'SEL-201' : 'BUY-301')}
+                          </Badge>
+                        </div>
                         <div className="text-muted small">{currentUser.email}</div>
                         <Badge bg={currentUser.role === 'Admin' ? 'danger' : currentUser.role === 'Driver' ? 'primary' : 'success'} className="mt-1">
                           Role: {currentUser.role}

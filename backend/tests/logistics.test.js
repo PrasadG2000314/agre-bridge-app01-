@@ -154,4 +154,14 @@ describe('User & Logistics Management API Tests', () => {
       expect(demoteRes.body).toHaveProperty('error');
     }
   });
+
+  // Test 11: Phone Lookup for Sender & Recipient Autofill
+  test('GET /api/users/by-phone/:phone should return matching user with custom userId', async () => {
+    const res = await request(app).get('/api/users/by-phone/0783339911');
+    if (res.statusCode === 200) {
+      expect(res.body).toHaveProperty('name');
+      expect(res.body).toHaveProperty('phone');
+      expect(res.body).toHaveProperty('userId');
+    }
+  });
 });

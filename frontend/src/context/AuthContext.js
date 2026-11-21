@@ -23,6 +23,7 @@ export const AuthProvider = ({ children }) => {
     } else {
       // Set a default active demo profile (Admin) so the app is immediately fully usable
       const defaultDemo = {
+        userId: 'ADM-001',
         name: 'Admin Manager',
         email: 'admin@agribridge.lk',
         role: 'Admin',
@@ -54,6 +55,7 @@ export const AuthProvider = ({ children }) => {
   const quickSwitchRole = (roleType) => {
     const rolePresets = {
       Admin: {
+        userId: 'ADM-001',
         name: 'Admin Manager',
         email: 'admin@agribridge.lk',
         role: 'Admin',
@@ -61,6 +63,7 @@ export const AuthProvider = ({ children }) => {
         location: { city: 'Colombo', district: 'Colombo' }
       },
       Driver: {
+        userId: 'DRV-101',
         name: 'Sunil Perera (Express Driver)',
         email: 'sunil.driver@agribridge.lk',
         role: 'Driver',
@@ -75,6 +78,7 @@ export const AuthProvider = ({ children }) => {
         }
       },
       Seller: {
+        userId: 'SEL-201',
         name: 'Nimal Fernando (Produce Seller)',
         email: 'nimal.seller@agribridge.lk',
         role: 'Seller',
@@ -82,6 +86,7 @@ export const AuthProvider = ({ children }) => {
         location: { city: 'Dambulla', district: 'Matale' }
       },
       Buyer: {
+        userId: 'BUY-301',
         name: 'Ruwan Wijesinghe (Wholesale Buyer)',
         email: 'ruwan.buyer@agribridge.lk',
         role: 'Buyer',

@@ -177,6 +177,7 @@ router.get('/', async (req, res) => {
     if (status) query.status = status;
     if (search) {
       query.$or = [
+        { userId: { $regex: search, $options: 'i' } },
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
         { phone: { $regex: search, $options: 'i' } },
@@ -187,6 +188,34 @@ router.get('/', async (req, res) => {
 
     const users = await User.find(query).sort({ createdAt: -1 });
     res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 5.1 Lookup User by Phone Number (Autofill Support)
+// ==========================================
+router.get('/by-phone/:phone', async (req, res) => {
+  try {
+    const rawPhone = (req.params.phone || '').trim();
+    const cleanDigits = rawPhone.replace(/\D/g, '');
+
+    // Allow flexible matching across formats (spaces, hyphens, country code)
+    let searchConditions = [{ phone: rawPhone }];
+    if (cleanDigits.length >= 7) {
+      // Build a regex pattern allowing optional non-digits between digits, e.g. 7\D*7\D*1\D*2\D*3
+      const lastDigits = cleanDigits.slice(-7);
+      const flexiblePattern = lastDigits.split('').join('\\D*');
+      searchConditions.push({ phone: { $regex: flexiblePattern, $options: 'i' } });
+    }
+
+    const user = await User.findOne({ $or: searchConditions }).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: 'No registered user matches this phone number.' });
+    }
+
+    res.json(user);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

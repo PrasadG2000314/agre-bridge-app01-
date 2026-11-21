@@ -27,6 +27,7 @@ router.get('/', async (req, res) => {
       User.find({
         role: { $ne: 'Driver' },
         $or: [
+          { userId: regex },
           { name: regex },
           { email: regex },
           { phone: regex },
@@ -40,6 +41,7 @@ router.get('/', async (req, res) => {
       User.find({
         role: 'Driver',
         $or: [
+          { userId: regex },
           { name: regex },
           { email: regex },
           { phone: regex },

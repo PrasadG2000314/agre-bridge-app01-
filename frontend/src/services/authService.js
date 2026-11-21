@@ -67,3 +67,8 @@ export const deleteUser = async (userId) => {
   const res = await axios.delete(`${API_BASE}/${userId}`, getAuthHeaders());
   return res.data;
 };
+
+export const getUserByPhone = async (phone) => {
+  const res = await axios.get(`${API_BASE}/by-phone/${encodeURIComponent(phone)}`);
+  return res.data;
+};
